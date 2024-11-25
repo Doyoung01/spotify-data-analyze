@@ -1,6 +1,4 @@
 from airflow import DAG
-from airflow.providers.postgres.hooks.postgres import PostgresHook
-from airflow.providers.amazon.aws.transfers.local_to_s3 import LocalFilesystemToS3Operator
 from airflow.decorators import task
 from airflow.models import Variable
 
@@ -10,13 +8,6 @@ from datetime import timedelta
 import utils.spotifyUtils as su
 import pandas as pd
 import boto3
-
-def get_Redshift_connection(autocommit=True):
-    hook = PostgresHook(postgres_conn_id='redshift_dev_db')
-    conn = hook.get_conn()
-    conn.autocommit = autocommit
-    return conn.cursor()
-
 
 @task
 def top_fifty_korean_tracks(output_path):
@@ -44,7 +35,8 @@ def top_fifty_korean_tracks(output_path):
                 "title": track['name'],
                 "artist": ', '.join(artists),
                 "popularity": track['popularity'],
-                "url": track['external_urls']['spotify']
+                "url": track['external_urls']['spotify'],
+                "date": datetime.now().date()
             })
 
         df = pd.DataFrame(tracks)
@@ -79,7 +71,7 @@ def average_time_of_artists(artists_id, output_path):
         if len(json['tracks']) != 0:
             duration = duration / len(json['tracks'])
 
-        data.append({"artist": name, "duration_ms": duration})
+        data.append({"artist": name, "duration_ms": duration, "date": datetime.now().date()})
 
     df = pd.DataFrame(data)
     df.sort_values(by="duration_ms", ascending=False)
@@ -156,7 +148,8 @@ def get_artist_follwers(artists_id, output_path):
         json = get_artist(id)
         data.append({
             "artist": json['name'],
-            "followers": json['followers']['total']
+            "followers": json['followers']['total'],
+            "date": datetime.now().date()
         })
     
     df = pd.DataFrame(data)
@@ -182,7 +175,7 @@ def upload_file_to_s3(bucket_name, local_file_path, s3_folder, aws_access_key_id
 
 with DAG(
     dag_id='spotify_kpop_data_analyze',
-    start_date=datetime(2024, 1, 1),
+    start_date=datetime(2024, 11, 23),
     schedule='0 0 * * *',
     max_active_runs=1,
     catchup=False,
@@ -210,7 +203,7 @@ with DAG(
         output_path=path[2]
     )
 
-    upload_korean_tracks = upload_file_to_s3(
+    upload_avg_korean_tracks = upload_file_to_s3(
         bucket_name='de4project',
         local_file_path=path[0],
         s3_folder='kpop-idol-data',
@@ -218,7 +211,7 @@ with DAG(
         aws_secret_access_key=Variable.get('AWS_SECRET_ACCESS_KEY'),
     )
 
-    upload_kpop_artists = upload_file_to_s3(
+    upload_avg_kpop_artists = upload_file_to_s3(
         bucket_name='de4project',
         local_file_path=path[1],
         s3_folder='kpop-idol-data',
@@ -234,6 +227,14 @@ with DAG(
         aws_secret_access_key=Variable.get('AWS_SECRET_ACCESS_KEY'),
     )
 
-    average_korean_tracks >> upload_korean_tracks
-    average_kpop_artists >> upload_kpop_artists
+    upload_korean_tracks = upload_file_to_s3(
+        bucket_name='de4project',
+        local_file_path='/tmp/top_fifty_korean_tracks.parquet',
+        s3_folder='kpop-idol-data',
+        aws_access_key_id=Variable.get('AWS_ACCESS_KEY'),
+        aws_secret_access_key=Variable.get('AWS_SECRET_ACCESS_KEY'),
+    )
+
+    average_korean_tracks >> [upload_korean_tracks, upload_avg_korean_tracks]
+    average_kpop_artists >> upload_avg_kpop_artists
     followers_kpop_artists >> upload_followers
