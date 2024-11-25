@@ -183,7 +183,7 @@ def upload_file_to_s3(bucket_name, local_file_path, s3_folder, aws_access_key_id
 with DAG(
     dag_id='spotify_kpop_data_analyze',
     start_date=datetime(2024, 1, 1),
-    schedule='0 0 0 * *',
+    schedule='0 0 * * *',
     max_active_runs=1,
     catchup=False,
     default_args={
@@ -197,24 +197,43 @@ with DAG(
         '/tmp/followers_of_top_fifty_artists.parquet'
     ]
 
-    average_time_of_artists(
+    average_korean_tracks = average_time_of_artists(
         top_fifty_korean_tracks(output_path='/tmp/top_fifty_korean_tracks.parquet'),
         output_path=path[0]
     )
-    average_time_of_artists(
+    average_kpop_artists = average_time_of_artists(
         get_kpop_artists(),
         output_path=path[1]
     )
-    get_artist_follwers(
+    followers_kpop_artists = get_artist_follwers(
         get_kpop_artists(),
         output_path=path[2]
     )
 
-    for p in path:
-        upload_file_to_s3(
-            bucket_name='de4project',
-            local_file_path=p,
-            s3_folder='kpop-idol-data',
-            aws_access_key_id=Variable.get('AWS_ACCESS_KEY'),
-            aws_secret_access_key=Variable.get('AWS_SECRET_ACCESS_KEY'),
-        )
+    upload_korean_tracks = upload_file_to_s3(
+        bucket_name='de4project',
+        local_file_path=path[0],
+        s3_folder='kpop-idol-data',
+        aws_access_key_id=Variable.get('AWS_ACCESS_KEY'),
+        aws_secret_access_key=Variable.get('AWS_SECRET_ACCESS_KEY'),
+    )
+
+    upload_kpop_artists = upload_file_to_s3(
+        bucket_name='de4project',
+        local_file_path=path[1],
+        s3_folder='kpop-idol-data',
+        aws_access_key_id=Variable.get('AWS_ACCESS_KEY'),
+        aws_secret_access_key=Variable.get('AWS_SECRET_ACCESS_KEY'),
+    )
+
+    upload_followers = upload_file_to_s3(
+        bucket_name='de4project',
+        local_file_path=path[2],
+        s3_folder='kpop-idol-data',
+        aws_access_key_id=Variable.get('AWS_ACCESS_KEY'),
+        aws_secret_access_key=Variable.get('AWS_SECRET_ACCESS_KEY'),
+    )
+
+    average_korean_tracks >> upload_korean_tracks
+    average_kpop_artists >> upload_kpop_artists
+    followers_kpop_artists >> upload_followers
