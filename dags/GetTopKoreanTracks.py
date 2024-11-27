@@ -34,13 +34,13 @@ def top_fifty_korean_tracks(output_path):
             tracks.append({
                 "title": track['name'],
                 "artist": ', '.join(artists),
-                "popularity": track['popularity'],
+                "popularity": track['popularity'].astype(int),
                 "url": track['external_urls']['spotify'],
                 "date": datetime.now().date()
             })
 
         df = pd.DataFrame(tracks)
-        df.to_parquet(output_path, engine='pyarrow', index=False)
+        df.to_csv(output_path, index=False)
         
         return set(artists_id)
 
@@ -74,8 +74,8 @@ def average_time_of_artists(artists_id, output_path):
         data.append({"artist": name, "duration_ms": duration, "date": datetime.now().date()})
 
     df = pd.DataFrame(data)
-    df.sort_values(by="duration_ms", ascending=False)
-    df.to_parquet(output_path, engine='pyarrow', index=False)
+    df.sort_values(by="duration_ms", ascending=False, inplace=True)
+    df.to_csv(output_path, index=False)
 
 
 def get_artist_top_tracks(id):
@@ -153,8 +153,8 @@ def get_artist_follwers(artists_id, output_path):
         })
     
     df = pd.DataFrame(data)
-    df.sort_values(by="followers", ascending=False)
-    df.to_parquet(output_path, engine='pyarrow', index=False)
+    df.sort_values(by="followers", ascending=False, inplace=True)
+    df.to_csv(output_path, index=False)
 
 
 @task
@@ -185,13 +185,13 @@ with DAG(
     }
 ) as dag:
     path = [
-        '/tmp/average_time_of_top_fifty_korean_tracks.parquet',
-        '/tmp/average_time_of_top_fifty_artists.parquet',
-        '/tmp/followers_of_top_fifty_artists.parquet'
+        '/tmp/average_time_of_top_fifty_korean_tracks.csv',
+        '/tmp/average_time_of_top_fifty_artists.csv',
+        '/tmp/followers_of_top_fifty_artists.csv'
     ]
 
     average_korean_tracks = average_time_of_artists(
-        top_fifty_korean_tracks(output_path='/tmp/top_fifty_korean_tracks.parquet'),
+        top_fifty_korean_tracks(output_path='/tmp/top_fifty_korean_tracks.csv'),
         output_path=path[0]
     )
     average_kpop_artists = average_time_of_artists(
@@ -229,7 +229,7 @@ with DAG(
 
     upload_korean_tracks = upload_file_to_s3(
         bucket_name='de4project',
-        local_file_path='/tmp/top_fifty_korean_tracks.parquet',
+        local_file_path='/tmp/top_fifty_korean_tracks.csv',
         s3_folder='kpop-idol-data',
         aws_access_key_id=Variable.get('AWS_ACCESS_KEY'),
         aws_secret_access_key=Variable.get('AWS_SECRET_ACCESS_KEY'),

@@ -24,7 +24,7 @@ def get_execution_dates_from_s3(bucket_name, prefix):
 
     dates = set()
     for obj in response.get('Contents', []):
-        match = re.match(rf"{prefix}(\d{{4}}-\d{{2}}-\d{{2}})/", obj['Key'])
+        match = re.match(rf"{prefix}/(\d{{4}}-\d{{2}}-\d{{2}})/?", obj['Key'])
         if match:
             dates.add(match.group(1))
     return sorted(list(dates))
@@ -46,12 +46,13 @@ def load_chart(s3_key, execution_dates, schema, table='korean_chart'):
         cur.execute(f"DELETE FROM {schema}.{table}")
 
         for date in execution_dates:
-            s3_path = f"s3://{s3_key}/{date}/top_fifty_korean_tracks.parquet"
+            s3_path = f"s3://{s3_key}/{date}/top_fifty_korean_tracks.csv"
             cur.execute(f'''
                 COPY {schema}.{table}
                 FROM '{s3_path}'
                 IAM_ROLE '{Variable.get('REDSHIFT_IAM_ROLE')}'
-                FORMAT AS PARQUET;
+                FORMAT AS CSV
+                IGNOREHEADER 1;
             ''')
         cur.execute("COMMIT;")
     except Exception as e:
@@ -68,18 +69,19 @@ def load_avg_time_chart(s3_key, execution_dates, schema, table='avg_time_chart')
         cur.execute(f'''
             CREATE TABLE IF NOT EXISTS {schema}.{table} (
                 artist VARCHAR(255),
-                duration_ms INT,
+                duration_ms FLOAT,
                 date DATE DEFAULT GETDATE()
             );''')
         cur.execute(f"DELETE FROM {schema}.{table}")
 
         for date in execution_dates:
-            s3_path = f"s3://{s3_key}/{date}/average_time_of_top_fifty_korean_tracks.parquet"
+            s3_path = f"s3://{s3_key}/{date}/average_time_of_top_fifty_korean_tracks.csv"
             cur.execute(f'''
                 COPY {schema}.{table}
                 FROM '{s3_path}'
                 IAM_ROLE '{Variable.get('REDSHIFT_IAM_ROLE')}'
-                FORMAT AS PARQUET;
+                FORMAT AS CSV
+                IGNOREHEADER 1;
             ''')
         cur.execute("COMMIT;")
     except Exception as e:
@@ -96,18 +98,19 @@ def load_avg_time_kpop(s3_key, execution_dates, schema, table='avg_time_kpop'):
         cur.execute(f'''
             CREATE TABLE IF NOT EXISTS {schema}.{table} (
                 artist VARCHAR(255),
-                duration_ms INT,
+                duration_ms FLOAT,
                 date DATE DEFAULT GETDATE()
             );''')
         cur.execute(f"DELETE FROM {schema}.{table}")
 
         for date in execution_dates:
-            s3_path = f"s3://{s3_key}/{date}/average_time_of_top_fifty_artists.parquet"
+            s3_path = f"s3://{s3_key}/{date}/average_time_of_top_fifty_artists.csv"
             cur.execute(f'''
                 COPY {schema}.{table}
                 FROM '{s3_path}'
                 IAM_ROLE '{Variable.get('REDSHIFT_IAM_ROLE')}'
-                FORMAT AS PARQUET;
+                FORMAT AS CSV
+                IGNOREHEADER 1;
             ''')
         cur.execute("COMMIT;")
     except Exception as e:
@@ -130,12 +133,13 @@ def load_followers(s3_key, execution_dates, schema, table='followers_kpop'):
         cur.execute(f"DELETE FROM {schema}.{table}")
 
         for date in execution_dates:
-            s3_path = f"s3://{s3_key}/{date}/followers_of_top_fifty_artists.parquet"
+            s3_path = f"s3://{s3_key}/{date}/followers_of_top_fifty_artists.csv"
             cur.execute(f'''
                 COPY {schema}.{table}
                 FROM '{s3_path}'
                 IAM_ROLE '{Variable.get('REDSHIFT_IAM_ROLE')}'
-                FORMAT AS PARQUET;
+                FORMAT AS CSV
+                IGNOREHEADER 1;
             ''')
         cur.execute("COMMIT;")
     except Exception as e:
@@ -146,7 +150,7 @@ def load_followers(s3_key, execution_dates, schema, table='followers_kpop'):
 with DAG(
     dag_id='redshift_data_load',
     start_date=datetime(2024, 1, 1),
-    schedule='0 1 * * *',
+    schedule='10 0 * * *',
     default_args={
         'retries': 1,
         'retry_delay': timedelta(minutes=3),
