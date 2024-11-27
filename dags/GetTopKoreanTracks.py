@@ -34,7 +34,7 @@ def top_fifty_korean_tracks(output_path):
             tracks.append({
                 "title": track['name'],
                 "artist": ', '.join(artists),
-                "popularity": track['popularity'].astype(int),
+                "popularity": track['popularity'],
                 "url": track['external_urls']['spotify'],
                 "date": datetime.now().date()
             })
